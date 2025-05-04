@@ -1,39 +1,44 @@
-version: '3.8'
+pipeline {
+    agent any
 
-services:
-  postgres:
-    image: postgres:16
-    container_name: postgres
-    restart: always
-    environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: 1234
-    ports:
-      - "5432:5432"
-    networks:
-      - app_network
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    environment {
+        DOCKER_IMAGE = 'rohith0702/forex'
+        DOCKER_TAG = 'latest'
+        DOCKER_CREDENTIALS_ID = 'docker-hub-credentials'
+    }
 
-  backend_app:
-    container_name: backend_app
-    build: .
-    restart: always
-    depends_on:
-      - postgres
-    environment:
-      DATABASE_URL: jdbc:postgresql://postgres:5432/sundaram
-      DATABASE_USER: admin
-      DATABASE_PASSWORD: 1234
-    ports:
-      - "8081:8081"
-    networks:
-      - app_network
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out code...'
+                checkout scm
+            }
+        }
 
-volumes:
-  pgdata:
+        stage('Build') {
+            steps {
+                echo 'Building Docker image...'
+                sh 'docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .'
+            }
+        }
 
-networks:
-  app_network:
-    driver: bridge
+        stage('Push Docker Image') {
+            steps {
+                echo 'Pushing to Docker Hub...'
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh 'docker-compose down || true'
+                sh 'docker-compose up -d'
+            }
+        }
+    }
+}
