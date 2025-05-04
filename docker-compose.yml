@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: 1234
     ports:
-      - "80:80"
+      - "9797:9797"
     networks:
       - app_network
     volumes:
