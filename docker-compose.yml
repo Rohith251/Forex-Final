@@ -23,7 +23,7 @@ services:
     depends_on:
       - postgres
     environment:
-      DATABASE_URL: jdbc:postgresql://postgres:5432/sundaram
+      DATABASE_URL: jdbc:postgresql://15.152.73.217:80/postgres
       DATABASE_USER: admin
       DATABASE_PASSWORD: 1234
     ports:
