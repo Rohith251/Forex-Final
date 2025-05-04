@@ -1,87 +1,39 @@
+version: '3.8'
 
-pipeline {
-    agent any
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 1234
+    ports:
+      - "5432:5432"
+    networks:
+      - app_network
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
-    environment {
-        DOCKER_IMAGE = 'rohith0702/forex'
-        DOCKER_TAG = 'latest'
-        DOCKER_CREDENTIALS_ID = 'docker-hub-credentials'  // The ID you gave when storing credentials in Jenkins
-    }
+  backend_app:
+    container_name: backend_app
+    build: .
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/sundaram
+      DATABASE_USER: admin
+      DATABASE_PASSWORD: 1234
+    ports:
+      - "8081:8081"
+    networks:
+      - app_network
 
-    stages {
-        stage('Cleanup') {
-            steps {
-                echo ' Cleaning workspace before starting...'
-                bat 'mvn clean'
-            }
-        }
+volumes:
+  pgdata:
 
-        stage('Checkout') {
-            steps {
-                echo ' Checking out code from repository...'
-                checkout scm
-            }
-        }
-
-        stage('Build') {
-            steps {
-                echo ' Building the application...'
-                bat '''
-                for /f "delims=" %%i in ('cd') do set "CURRENT_DIR=%%i"
-                docker run --rm -v "%CURRENT_DIR%:/app" -w /app maven:3.9.9-eclipse-temurin-17 mvn package
-                '''
-            }
-        }
-
-        stage('Test') {
-            steps {
-                echo ' Running tests...'
-                bat 'mvn test'
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                echo " Building Docker image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                bat "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                echo " Pushing Docker image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    bat '''
-                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    '''
-                    bat "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                }
-            }
-        }
-
-        stage('Deploy with Docker Compose') {
-            steps {
-                echo ' Deploying services using Docker Compose...'
-                bat 'docker-compose down || exit 0'  // Stops existing containers if running
-                bat 'docker-compose up -d'         // Starts backend app only (PostgreSQL is local)
-            }
-        }
-    }
-
-    post {
-        always {
-            echo ' Pipeline completed!'
-        }
-        cleanup {
-            echo ' Cleaning up containers...'
-            bat 'docker stop backend_app || exit 0'
-            bat 'docker rm backend_app || exit 0'
-        }
-        failure {
-            echo ' Build failed!'
-        }
-        success {
-            echo ' Build succeeded!'
-        }
-    }
-}
+networks:
+  app_network:
+    driver: bridge
